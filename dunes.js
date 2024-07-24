@@ -482,6 +482,8 @@ program
     const utxoHashes = utxos.map((utxo) => `${utxo.txid}:${utxo.vout}`);
     const chunkSize = 10; // Size of each chunk
 
+    console.log(utxos);
+
     // Function to chunk the utxoHashes array
     const chunkedUtxoHashes = [];
     for (let i = 0; i < utxoHashes.length; i += chunkSize) {
@@ -1773,6 +1775,84 @@ async function retryAsync(operation, maxRetries, retryInterval) {
     return await retryAsync(operation, maxRetries - 1, retryInterval);
   }
 }
+
+program
+  .command("splitDune")
+  .description("Split Dune into multiple UTXOs")
+  .argument("<utxo>", "Original UTXO")
+  .argument("<number>", "Number of UTXOs for split")
+  .argument("<ticker>", "Ticker of the Dune")
+  .action(async (utxo, number, ticker) => {
+    const [txid, vout] = utxo.split(":");
+    const num = parseInt(number);
+
+    if (num > 12) {
+      console.error("Exceed of max number of UTXOs");
+      process.exit(1);
+    }
+
+    try {
+      const dunes = await getDunesForUtxo(`${txid}:${vout}`);
+      const duneOnUtxo = dunes.find((d) => d.dune === ticker);
+
+      if (!duneOnUtxo) {
+        console.error(`No ${ticker} on UTXO ${utxo}`);
+        process.exit(1);
+      }
+
+      const balance = BigInt(
+        parseFloat(duneOnUtxo.amount.match(/\d+/).input) * Math.pow(10, 8)
+      );
+      const splitAmount = balance / BigInt(num);
+      const remainder = balance % BigInt(num);
+
+      const splitAmounts = new Array(num).fill(splitAmount);
+      splitAmounts[0] += remainder;
+
+      let wallet = JSON.parse(fs.readFileSync(WALLET_PATH));
+      let tx = new Transaction();
+
+      tx.from({
+        txid,
+        vout: parseInt(vout),
+        script: wallet.utxos.find(
+          (u) => u.txid === txid && u.vout === parseInt(vout)
+        ).script,
+        satoshis: wallet.utxos.find(
+          (u) => u.txid === txid && u.vout === parseInt(vout)
+        ).satoshis,
+      });
+
+      const outputs = [];
+      for (let i = 0; i < splitAmounts.length; i++) {
+        outputs.push({
+          amount: splitAmounts[i],
+          ticker,
+          address: wallet.address,
+        });
+      }
+
+      const edicts = outputs.map(
+        (output, index) => new Edict(index, output.amount, index + 1)
+      );
+      const script = constructScript(null, 0, null, edicts);
+      tx.addOutput(new dogecore.Transaction.Output({ script, satoshis: 0 }));
+
+      for (let i = 0; i < num; i++) {
+        tx.to(wallet.address, 100000);
+      }
+
+      await fund(wallet, tx);
+
+      tx.sign(wallet.privkey);
+      await broadcast(tx, true);
+
+      console.log("Transaction ID:", tx.hash);
+    } catch (error) {
+      console.error("Error splitting UTXO:", error);
+      process.exit(1);
+    }
+  });
 
 main().catch((e) => {
   let reason =
