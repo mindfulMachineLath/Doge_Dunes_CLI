@@ -482,8 +482,6 @@ program
     const utxoHashes = utxos.map((utxo) => `${utxo.txid}:${utxo.vout}`);
     const chunkSize = 10; // Size of each chunk
 
-    console.log(utxos);
-
     // Function to chunk the utxoHashes array
     const chunkedUtxoHashes = [];
     for (let i = 0; i < utxoHashes.length; i += chunkSize) {
