@@ -171,6 +171,12 @@ node dunes.js sendDunesNoProtocol DDjbkNTHPZAq3f6pzApDzP712V1xqSE2Ya 10 WHO•LE
 Split Dunes from One UTXO to Multiple UTXOs:
 
 ```
+node dunes.js splitDune <utxo> <number> <ticker>
+```
+
+Example:
+
+```
 node dunes.js splitDune DMitek3aBExqxhm9BGLkHUMsxH7EvbpCNL:2 9 ONEDUNE•ONELAMBO
 ```
 
