@@ -1,0 +1,12 @@
+{
+  "privkey": "QRATPWHswi1fdsU6nfVeUm51KhHcw5ZLsrXh54bCPmtqZR79tRdM",
+  "address": "DMmhf9axB4kPnwmtXwMuwV2L25XbPNgpk4",
+  "utxos": [
+    {
+      "txid": "118d0324162078a739ac1838ed3988e796dbf2b7d591bf0454d00ac12adbe2d1",
+      "vout": 0,
+      "script": "76a914b66e4d886a403ee1c7ea50db32881f9068919e3a88ac",
+      "satoshis": 1000000000
+    }
+  ]
+}

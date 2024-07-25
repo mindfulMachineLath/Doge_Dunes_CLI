@@ -1781,75 +1781,73 @@ program
   .argument("<number>", "Number of UTXOs for split")
   .argument("<ticker>", "Ticker of the Dune")
   .action(async (utxo, number, ticker) => {
-    const [txid, vout] = utxo.split(":");
-    const num = parseInt(number);
-
-    if (num > 12) {
-      console.error("Exceed of max number of UTXOs");
+    if (isNaN(number) || number <= 0 || number > 12) {
+      console.error(
+        "The number of UTXOs to split into must be a number between 1 and 12."
+      );
       process.exit(1);
     }
+
+    const [txid, vout] = utxo.split(":");
+    if (!txid || isNaN(vout)) {
+      console.error("Invalid UTXO format. Expected format: txid:vout");
+      process.exit(1);
+    }
+
+    let wallet = JSON.parse(fs.readFileSync(WALLET_PATH));
+    const dune_utxo = wallet.utxos.find(
+      (utxo) => utxo.txid == txid && utxo.vout == vout
+    );
+
+    if (!dune_utxo) {
+      console.error(`UTXO ${txid}:${vout} not found in wallet`);
+      process.exit(1);
+    }
+
+    const dunes = await getDunesForUtxo(`${txid}:${vout}`);
+    const dune = dunes.find((d) => d.dune == ticker);
+
+    if (!dune) {
+      console.error(`Dune ${ticker} not found in UTXO ${txid}:${vout}`);
+      process.exit(1);
+    }
+
+    let duneAmount = BigInt(dune.amount.match(/\d+/)[0]);
+    const splitAmount = duneAmount / BigInt(number);
+    const remainder = duneAmount % BigInt(number);
+
+    let tx = new Transaction();
+    tx.from(dune_utxo);
+
+    const { id } = await getDune(ticker);
+    const duneId = parseDuneId(id);
+
+    const edicts = [];
+    for (let i = 0; i < number; i++) {
+      const amount = i === 0 ? splitAmount + remainder : splitAmount;
+      edicts.push(new Edict(duneId, amount, i + 1));
+    }
+
+    console.log(edicts);
+
+    const script = constructScript(null, 1, null, edicts);
+    tx.addOutput(
+      new dogecore.Transaction.Output({ script: script, satoshis: 0 })
+    );
+
+    for (let i = 0; i < number; i++) {
+      tx.to(wallet.address, 100000);
+    }
+
+    await fund(wallet, tx);
 
     try {
-      const dunes = await getDunesForUtxo(`${txid}:${vout}`);
-      const duneOnUtxo = dunes.find((d) => d.dune === ticker);
-
-      if (!duneOnUtxo) {
-        console.error(`No ${ticker} on UTXO ${utxo}`);
-        process.exit(1);
-      }
-
-      const balance = BigInt(
-        parseFloat(duneOnUtxo.amount.match(/\d+/).input) * Math.pow(10, 8)
-      );
-      const splitAmount = balance / BigInt(num);
-      const remainder = balance % BigInt(num);
-
-      const splitAmounts = new Array(num).fill(splitAmount);
-      splitAmounts[0] += remainder;
-
-      let wallet = JSON.parse(fs.readFileSync(WALLET_PATH));
-      let tx = new Transaction();
-
-      tx.from({
-        txid,
-        vout: parseInt(vout),
-        script: wallet.utxos.find(
-          (u) => u.txid === txid && u.vout === parseInt(vout)
-        ).script,
-        satoshis: wallet.utxos.find(
-          (u) => u.txid === txid && u.vout === parseInt(vout)
-        ).satoshis,
-      });
-
-      const outputs = [];
-      for (let i = 0; i < splitAmounts.length; i++) {
-        outputs.push({
-          amount: splitAmounts[i],
-          ticker,
-          address: wallet.address,
-        });
-      }
-
-      const edicts = outputs.map(
-        (output, index) => new Edict(index, output.amount, index + 1)
-      );
-      const script = constructScript(null, 0, null, edicts);
-      tx.addOutput(new dogecore.Transaction.Output({ script, satoshis: 0 }));
-
-      for (let i = 0; i < num; i++) {
-        tx.to(wallet.address, 100000);
-      }
-
-      await fund(wallet, tx);
-
-      tx.sign(wallet.privkey);
       await broadcast(tx, true);
-
-      console.log("Transaction ID:", tx.hash);
-    } catch (error) {
-      console.error("Error splitting UTXO:", error);
-      process.exit(1);
+    } catch (e) {
+      console.log(e);
     }
+
+    console.log(`Transaction broadcasted: ${tx.hash}`);
   });
 
 main().catch((e) => {
